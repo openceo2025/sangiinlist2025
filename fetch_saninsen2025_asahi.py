@@ -26,21 +26,27 @@ district_codes.remove("B32")   # 鳥取単独ページは存在しない
 district_codes.append("C01")
 
 def fetch(url: str, retry: int = 3, sleep: int = 2) -> str:
-    """
-    指定 URL を取得して HTML 文字列を返す。失敗時はリトライ。
-    """
+    """指定 URL を取得して HTML 文字列を返す。失敗時は空文字を返す。"""
+
     for _ in range(retry):
         try:
             r = requests.get(
                 url,
                 timeout=10,
-                headers={"User-Agent": "Mozilla/5.0 (CandidateFetcher/1.0)"})
+                headers={"User-Agent": "Mozilla/5.0 (CandidateFetcher/1.0)"},
+            )
+            if r.status_code == 404:
+                # ページが存在しない場合はスキップ
+                print(f"  ! {url} returned 404")
+                return ""
             r.raise_for_status()
             return r.text
         except Exception as e:
             print(f"Retrying {url} because {e}")
             time.sleep(sleep)
-    raise RuntimeError(f"Failed to fetch {url}")
+
+    print(f"Failed to fetch {url}. Skipping.")
+    return ""
 
 def parse_candidates(html: str, default_district: str) -> list[dict]:
     """
