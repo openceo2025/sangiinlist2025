@@ -19,11 +19,30 @@ from bs4 import BeautifulSoup
 # ベース URL（B01〜B47 が各選挙区、C01 が比例区）
 BASE = "https://www.asahi.com/senkyo/saninsen/koho/"
 
-# 47 都道府県用のコード B01〜B47（ただし B32=鳥取は島根と合区なので飛ばす）
-district_codes = [f"B{n:02d}" for n in range(1, 48)]
-district_codes.remove("B32")   # 鳥取単独ページは存在しない
-# 比例区
-district_codes.append("C01")
+# 動的取得に失敗した際に用いるフォールバックのコード一覧
+FALLBACK_CODES = [f"B{n:02d}" for n in range(1, 48)]
+FALLBACK_CODES.remove("B32")  # 鳥取単独ページは存在しない
+FALLBACK_CODES.append("C01")
+
+
+def get_district_codes() -> list[str]:
+    """候補者一覧トップページから選挙区コードを抽出して返す。"""
+
+    html = fetch(BASE)
+    if not html:
+        return FALLBACK_CODES
+
+    soup = BeautifulSoup(html, "html.parser")
+    codes: set[str] = set()
+    for a in soup.find_all("a", href=True):
+        m = re.search(r"/koho/([A-Z]\d{2})\.html", a["href"])
+        if m:
+            codes.add(m.group(1))
+
+    if not codes:
+        return FALLBACK_CODES
+
+    return sorted(codes)
 
 def fetch(url: str, retry: int = 3, sleep: int = 2) -> str:
     """指定 URL を取得して HTML 文字列を返す。失敗時は空文字を返す。"""
@@ -111,6 +130,7 @@ def parse_candidates(html: str, default_district: str) -> list[dict]:
 def main() -> None:
     all_rows: list[dict] = []
 
+    district_codes = get_district_codes()
     for code in district_codes:
         url = f"{BASE}{code}.html"
         print(f"Scraping {url}")
