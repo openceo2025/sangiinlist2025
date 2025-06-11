@@ -40,6 +40,9 @@ def fetch(url: str, retry: int = 3, sleep: int = 2) -> str:
                 print(f"  ! {url} returned 404")
                 return ""
             r.raise_for_status()
+            # 朝日新聞のページは UTF-8 で提供されているが、
+            # requests が誤判定する場合があるため明示的に指定する
+            r.encoding = "utf-8"
             return r.text
         except Exception as e:
             print(f"Retrying {url} because {e}")
@@ -56,30 +59,42 @@ def parse_candidates(html: str, default_district: str) -> list[dict]:
     soup = BeautifulSoup(html, "html.parser")
 
     # ページタイトルから選挙区名を補足（例: "参院選東京 候補者一覧"）
-    h1 = soup.find("h1")
+    h1 = soup.select_one(".PageTitle .Title h1") or soup.find("h1")
     district = default_district
-    if h1 and "参院選" in h1.text:
-        district = h1.text.split("参院選")[-1].split("候補者一覧")[0].strip()
+    if h1:
+        m = re.search(r"参院選\s*(.+?)候補者一覧", h1.get_text(strip=True))
+        if m:
+            district = m.group(1).split("選挙区")[0].strip()
 
-    # 「立候補予定者一覧」の見出し直後にリストがある
-    section = soup.find("h2", string=lambda x: x and "立候補予定者一覧" in x)
-    if not section:
-        return []
+    # 新サイト構造： <div class="snkKohoInfoBox" data-type="yoteisha"> 内の li
+    container = soup.find("div", class_="snkKohoInfoBox", attrs={"data-type": "yoteisha"})
+    if container:
+        tags = container.find_all("li")
+    else:
+        # 旧構造にフォールバック
+        section = soup.find("h2", string=lambda x: x and "立候補予定者一覧" in x)
+        if not section:
+            return []
+        tags = []
+        for tag in section.find_all_next(["li", "p"], limit=200):
+            text = tag.get_text(" ", strip=True)
+            if (not text) or text.startswith("＊") or "顔ぶれの見方" in text:
+                break
+            tags.append(tag)
 
     candidates: list[dict] = []
-    for tag in section.find_all_next(["li", "p"], limit=200):
-        text = tag.get_text(" ", strip=True)
-        # 空行・注釈・見出しの終端などで終了
-        if (not text) or text.startswith("＊") or "顔ぶれの見方" in text:
-            break
-        # 候補者行は「名前 年齢 党派現新…」という形
-        parts = re.split(r"\s+", text.lstrip("●*◇・"))
-        if len(parts) < 3 or not parts[1].isdigit():
-            continue
+    for tag in tags:
+        text = tag.get_text(" ", strip=True).lstrip("●*◇・")
+        parts = re.split(r"\s+", text)
 
-        name = parts[0]
-        age = parts[1]
-        party_status = parts[2]
+        # 年齢の位置を特定（数字のみのトークン）
+        age_idx = next((i for i, p in enumerate(parts) if p.isdigit()), -1)
+        if age_idx == -1 or age_idx + 1 >= len(parts):
+            continue
+        name = "".join(parts[:age_idx])
+        age = parts[age_idx]
+        party_status = parts[age_idx + 1]
+
         # 「自現①」→「自」／「立新」→「立」など、先頭の党派だけを抽出
         m = re.match(r"([^\d現新前元]+)", party_status)
         party = m.group(1) if m else party_status
@@ -88,7 +103,7 @@ def parse_candidates(html: str, default_district: str) -> list[dict]:
             "選挙区": district,
             "氏名": name,
             "年齢": age,
-            "党派": party
+            "党派": party,
         })
 
     return candidates
