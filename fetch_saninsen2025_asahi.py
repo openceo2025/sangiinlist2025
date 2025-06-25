@@ -15,6 +15,8 @@ import csv
 import time
 import requests
 from bs4 import BeautifulSoup
+from slugify import slugify
+from pykakasi import kakasi
 
 # ベース URL（B01〜B47 が各選挙区、C01 が比例区）
 BASE = "https://www.asahi.com/senkyo/saninsen/koho/"
@@ -23,6 +25,21 @@ BASE = "https://www.asahi.com/senkyo/saninsen/koho/"
 FALLBACK_CODES = [f"B{n:02d}" for n in range(1, 48)]
 FALLBACK_CODES.remove("B32")  # 鳥取単独ページは存在しない
 FALLBACK_CODES.append("C01")
+
+
+_kakasi = kakasi()
+_kakasi.setMode("H", "a")
+_kakasi.setMode("K", "a")
+_kakasi.setMode("J", "a")
+_converter = _kakasi.getConverter()
+
+
+def slugify_jp(text: str) -> str:
+    """Romanize Japanese text and return a slug suitable for IDs."""
+    romaji = _converter.do(text)
+    romaji = romaji.lower()
+    slug = re.sub(r"[^a-z0-9]+", "-", romaji)
+    return slug.strip("-")
 
 
 def get_district_codes() -> list[str]:
@@ -71,10 +88,7 @@ def fetch(url: str, retry: int = 3, sleep: int = 2) -> str:
     return ""
 
 def parse_candidates(html: str, default_district: str) -> list[dict]:
-    """
-    HTML を解析して候補者情報を抽出し、
-    [{'選挙区', '氏名', '年齢', '党派'}, ...] のリストで返す。
-    """
+    """Return candidate info list for one page in csv2giin.py compatible format."""
     soup = BeautifulSoup(html, "html.parser")
 
     # ページタイトルから選挙区名を補足（例: "参院選東京 候補者一覧"）
@@ -114,15 +128,29 @@ def parse_candidates(html: str, default_district: str) -> list[dict]:
         age = parts[age_idx]
         party_status = parts[age_idx + 1]
 
-        # 「自現①」→「自」／「立新」→「立」など、先頭の党派だけを抽出
+        # "自現①"->"自" etc. Extract first party code.
         m = re.match(r"([^\d現新前元]+)", party_status)
         party = m.group(1) if m else party_status
 
+        is_proportional = "比例" in district or default_district.startswith("C")
+        senkyoku = "比例" if is_proportional else district
+        todoufuken = "" if is_proportional else district
+
+        candidate_id = f"{slugify_jp(senkyoku or 'proportional')}-{slugify_jp(name)}"
+
         candidates.append({
-            "選挙区": district,
-            "氏名": name,
-            "年齢": age,
-            "党派": party,
+            "id": candidate_id,
+            "todoufuken": todoufuken,
+            "senkyoku": senkyoku,
+            "seitou": party,
+            "title": name,
+            "detail": f"{age}歳",
+            "tubohantei": "",
+            "tubonaiyou": "",
+            "tuboURL": "",
+            "uraganehantei": "",
+            "uraganenaiyou": "",
+            "uraganeURL": "",
         })
 
     return candidates
@@ -145,8 +173,21 @@ def main() -> None:
         print("No data scraped. Aborting.")
         return
 
-    # CSV 書き出し
-    keys = ["選挙区", "氏名", "年齢", "党派"]
+    # CSV 出力 (csv2giin.py 互換フォーマット)
+    keys = [
+        "id",
+        "todoufuken",
+        "senkyoku",
+        "seitou",
+        "title",
+        "detail",
+        "tubohantei",
+        "tubonaiyou",
+        "tuboURL",
+        "uraganehantei",
+        "uraganenaiyou",
+        "uraganeURL",
+    ]
     with open("saninsen2025_candidates.csv", "w", newline="", encoding="utf-8-sig") as f:
         writer = csv.DictWriter(f, fieldnames=keys)
         writer.writeheader()
