@@ -15,7 +15,6 @@ import csv
 import time
 import requests
 from bs4 import BeautifulSoup
-from slugify import slugify
 from pykakasi import kakasi
 
 # ベース URL（B01〜B47 が各選挙区、C01 が比例区）
@@ -28,15 +27,11 @@ FALLBACK_CODES.append("C01")
 
 
 _kakasi = kakasi()
-_kakasi.setMode("H", "a")
-_kakasi.setMode("K", "a")
-_kakasi.setMode("J", "a")
-_converter = _kakasi.getConverter()
 
 
 def slugify_jp(text: str) -> str:
     """Romanize Japanese text and return a slug suitable for IDs."""
-    romaji = _converter.do(text)
+    romaji = "".join(d["hepburn"] for d in _kakasi.convert(text))
     romaji = romaji.lower()
     slug = re.sub(r"[^a-z0-9]+", "-", romaji)
     return slug.strip("-")
