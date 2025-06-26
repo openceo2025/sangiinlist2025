@@ -140,6 +140,7 @@ def parse_candidates(html: str, default_district: str) -> list[dict]:
             "seitou": party,
             "title": name,
             "detail": f"{age}歳",
+            "age": age,
             "tubohantei": "",
             "tubonaiyou": "",
             "tuboURL": "",
@@ -176,6 +177,7 @@ def main() -> None:
         "seitou",
         "title",
         "detail",
+        "age",
         "tubohantei",
         "tubonaiyou",
         "tuboURL",
@@ -183,7 +185,7 @@ def main() -> None:
         "uraganenaiyou",
         "uraganeURL",
     ]
-    with open("saninsen2025_candidates.csv", "w", newline="", encoding="utf-8-sig") as f:
+    with open("saninsen2025_candidates.csv", "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=keys)
         writer.writeheader()
         writer.writerows(all_rows)
