@@ -29,6 +29,11 @@ FALLBACK_CODES.append("C01")
 _kakasi = kakasi()
 
 
+def to_hiragana(text: str) -> str:
+    """Return hiragana reading for given Japanese text."""
+    return "".join(d["hira"] for d in _kakasi.convert(text))
+
+
 def slugify_jp(text: str) -> str:
     """Romanize Japanese text and return a slug suitable for IDs."""
     romaji = "".join(d["hepburn"] for d in _kakasi.convert(text))
@@ -157,7 +162,10 @@ def parse_candidates(html: str, default_district: str) -> list[dict]:
         age_idx = next((i for i, p in enumerate(parts) if p.isdigit()), -1)
         if age_idx == -1 or age_idx + 1 >= len(parts):
             continue
-        name = "".join(parts[:age_idx])
+        name_tokens = parts[:age_idx]
+        name = "".join(name_tokens)
+        surname = name_tokens[0] if name_tokens else name
+        yomi = to_hiragana(surname)
         age = parts[age_idx]
         party_status = parts[age_idx + 1]
 
@@ -181,6 +189,7 @@ def parse_candidates(html: str, default_district: str) -> list[dict]:
             "senkyoku": senkyoku,
             "seitou": party,
             "title": name,
+            "yomi": yomi,
             "detail": f"{age}歳",
             "age": age,
             "tubohantei": "",
@@ -218,6 +227,7 @@ def main() -> None:
         "senkyoku",
         "seitou",
         "title",
+        "yomi",
         "detail",
         "age",
         "tubohantei",
