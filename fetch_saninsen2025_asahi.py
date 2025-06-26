@@ -95,23 +95,27 @@ def parse_candidates(html: str, default_district: str) -> list[dict]:
             district = m.group(1).split("選挙区")[0].strip()
 
     # 新サイト構造： <div class="snkKohoInfoBox" data-type="yoteisha"> 内の li
-    container = soup.find("div", class_="snkKohoInfoBox", attrs={"data-type": "yoteisha"})
-    if container:
-        tags = container.find_all("li")
+    containers = soup.find_all("div", class_="snkKohoInfoBox", attrs={"data-type": "yoteisha"})
+    tags: list[tuple[BeautifulSoup, str]] = []
+    if containers:
+        for c in containers:
+            h3 = c.select_one(".snkTitle h3")
+            container_party = h3.get_text(strip=True) if h3 else ""
+            for li in c.find_all("li"):
+                tags.append((li, container_party))
     else:
         # 旧構造にフォールバック
         section = soup.find("h2", string=lambda x: x and "立候補予定者一覧" in x)
         if not section:
             return []
-        tags = []
         for tag in section.find_all_next(["li", "p"], limit=200):
             text = tag.get_text(" ", strip=True)
             if (not text) or text.startswith("＊") or "顔ぶれの見方" in text:
                 break
-            tags.append(tag)
+            tags.append((tag, ""))
 
     candidates: list[dict] = []
-    for tag in tags:
+    for tag, container_party in tags:
         text = tag.get_text(" ", strip=True).lstrip("●*◇・")
         parts = re.split(r"\s+", text)
 
@@ -123,9 +127,12 @@ def parse_candidates(html: str, default_district: str) -> list[dict]:
         age = parts[age_idx]
         party_status = parts[age_idx + 1]
 
-        # "自現①"->"自" etc. Extract first party code.
-        m = re.match(r"([^\d現新前元]+)", party_status)
-        party = m.group(1) if m else party_status
+        if container_party:
+            party = container_party
+        else:
+            # "自現①"->"自" etc. Extract first party code.
+            m = re.match(r"([^\d現新前元]+)", party_status)
+            party = m.group(1) if m else party_status
 
         is_proportional = "比例" in district or default_district.startswith("C")
         senkyoku = "比例" if is_proportional else district
