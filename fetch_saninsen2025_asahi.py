@@ -37,6 +37,40 @@ def slugify_jp(text: str) -> str:
     return slug.strip("-")
 
 
+def unify_party(name: str) -> str:
+    """Normalize party name variations."""
+    aliases = {
+        "自": "自民",
+        "自民党": "自民",
+        "立": "立憲",
+        "立憲民主党": "立憲",
+        "維": "維新",
+        "日本維新の会": "維新",
+        "共": "共産",
+        "共産党": "共産",
+        "れ": "れいわ",
+        "れいわ新選組": "れいわ",
+        "保": "日保",
+        "日本保守党": "日保",
+        "諸": "諸派",
+        "無所属連合": "諸派",
+        "その他": "諸派",
+        "無": "無所属",
+        "公": "公明",
+        "公明党": "公明",
+        "社": "社民",
+        "社民党": "社民",
+        "国民民主党": "国民",
+        "参政党": "参政",
+        "みんなでつくる党": "みんつく",
+        "NHK党": "N国",
+        "再生の道": "再道",
+        "チームみらい": "みらい",
+        "日本改革党": "日改",
+    }
+    return aliases.get(name, name)
+
+
 def get_district_codes() -> list[str]:
     """候補者一覧トップページから選挙区コードを抽出して返す。"""
 
@@ -133,6 +167,7 @@ def parse_candidates(html: str, default_district: str) -> list[dict]:
             # "自現①"->"自" etc. Extract first party code.
             m = re.match(r"([^\d現新前元]+)", party_status)
             party = m.group(1) if m else party_status
+        party = unify_party(party)
 
         is_proportional = "比例" in district or default_district.startswith("C")
         senkyoku = "比例" if is_proportional else district
