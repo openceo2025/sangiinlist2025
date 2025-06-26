@@ -91,6 +91,16 @@ def get_list_paths() -> tuple[list[str], list[str]]:
     return pref_paths, hirei_paths
 
 
+def extract_pref_name(html: str) -> str:
+    """Return prefecture name from prefecture page HTML."""
+    soup = BeautifulSoup(html, "html.parser")
+    meta = soup.find("meta", attrs={"name": "description"})
+    text = meta["content"] if meta else soup.title.string if soup.title else ""
+    if "選挙区" in text:
+        return text.split("選挙区")[0].strip()
+    return text.strip()
+
+
 def parse_candidates(html: str, senkyoku: str, is_proportional: bool) -> list[dict]:
     soup = BeautifulSoup(html, "html.parser")
     rows: list[dict] = []
@@ -137,9 +147,9 @@ def main() -> None:
     all_rows: list[dict] = []
     for path in pref_paths:
         url = path if path.startswith("http") else f"https://go2senkyo.com{path}"
-        senkyoku = path.rstrip("/").split("/")[-1]
         print(f"Scraping {url}")
         html = fetch(url)
+        senkyoku = extract_pref_name(html) or path.rstrip("/").split("/")[-1]
         rows = parse_candidates(html, senkyoku, False)
         if not rows:
             print(f"  ! No candidates found for {path}")
